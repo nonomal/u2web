@@ -14,8 +14,25 @@ const DEFAULT_ABS =
   'https://stream.pull.workers.dev/video'
 /** 默认内容API服务,可被 localStorage.apibaseurl 覆盖 */
 const DEFAULT_API = 'https://r.suconghou.cn/video/api/v3'
+/** 默认 P2P 信令服务,可被 localStorage.ws 覆盖;留空表示默认不启用 P2P(纯 HTTP 下载) */
+const DEFAULT_SIGNAL = ''
+
+/** 启用 P2P 时的 ICE 服务器(NAT 穿透);与信令服务配套,可按需替换 */
+export const ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.voipbuster.com:3478' },
+  { urls: 'stun:stun.voipstunt.com:3478' },
+  { urls: 'stun:stun.linphone.org:3478' },
+]
 
 export const defaultImg = 'https://assets.suconghou.cn/defaultImg.png'
+
+/**
+ * P2P 信令服务地址:localStorage `ws`(设置页)优先,未配置时用 DEFAULT_SIGNAL。
+ * 引擎以 tracker 是否为空判断是否启用 P2P,故返回空串即表示纯 HTTP 下载
+ */
+export function signalURL(): string {
+  return localStorage.getItem('ws') || DEFAULT_SIGNAL
+}
 
 /** 视频解析服务镜像列表;相对路径解析为当前站点 */
 export function videoBaseURLs(): string[] {
@@ -34,6 +51,7 @@ export function apiBaseURL(): string {
 
 /** 视频封面图地址;可用 localStorage.imgServer 单独指定 */
 export function imgSrc(id?: string): string {
+  if (!id) return ''
   const server = localStorage.getItem('imgServer')
   const base = server || videoBaseURLs()[0] || ''
   return `${base}/${id}.jpg`
@@ -41,13 +59,14 @@ export function imgSrc(id?: string): string {
 
 const reportError = (e: unknown) => {
   console.error(e)
-  toast.error(e instanceof Error ? e.message || e.stack || String(e) : String(e))
+  const text = e instanceof Error ? e.message || e.stack || String(e) : e == null ? '' : String(e)
+  if (text) toast.error(text)
 }
 
 const filter = <T>(res: { status: number; statusText: string; data: T & { code?: number; msg?: string; error?: { errors?: { message?: string }[] } } }): ApiResult<T> => {
   if (res.status >= 200 && res.status < 300) {
-    if (Number.isInteger(res.data.code) && res.data.code !== 0) {
-      reportError(res.data.msg)
+    if (res.data && Number.isInteger(res.data.code) && res.data.code !== 0) {
+      reportError(res.data.msg || res.statusText)
       return { ok: false, data: res.data, status: res.status }
     }
     return { ok: true, data: res.data, status: res.status }
@@ -66,10 +85,7 @@ const httpCreate = (baseURL: string, timeout = 60e3): AxiosInstance => {
   })
   instance.interceptors.response.use(
     filter as unknown as (res: import('axios').AxiosResponse) => import('axios').AxiosResponse,
-    (e) => {
-      reportError(e)
-      return Promise.reject(e)
-    },
+    (e) => Promise.reject(e),
   )
   return instance
 }
@@ -94,8 +110,8 @@ export const playerInfo = async (id: string): Promise<ApiResult<PlayerInfo>> => 
         baseURL: urls[i],
       })
       if (res.ok) {
-        const data = res.data as unknown as { error?: unknown; streams?: Record<string, unknown> }
-        if (i < urls.length - 1 && (data.error || !data.streams || !Object.keys(data.streams).length)) {
+        const data = res.data as unknown as { error?: unknown; streams?: Record<string, unknown> } | null
+        if (i < urls.length - 1 && (data?.error || !data?.streams || !Object.keys(data.streams).length)) {
           continue
         }
         return res

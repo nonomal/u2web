@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, X, Home, MessageCircle, Info, Settings, Globe } from '@lucide/vue'
+import { Menu, Home, Info, Settings, Globe } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
-import { chatStore } from '@/stores/chat'
 import { saveLang, type LangCode } from '@/locales'
 import SearchBox from './SearchBox.vue'
 
@@ -11,10 +10,10 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const open = ref(false)
 const langOpen = ref(false)
+const langRef = ref<HTMLElement>()
 
 const links = [
   { to: '/', label: 'header.home', icon: Home },
-  { to: '/chat', label: 'header.chat', icon: MessageCircle },
   { to: '/about', label: 'header.about', icon: Info },
   { to: '/setting', label: 'header.setting', icon: Settings },
 ]
@@ -36,6 +35,14 @@ function setLang(code: LangCode) {
   saveLang(code)
   langOpen.value = false
 }
+
+function onDocPointerDown(e: PointerEvent) {
+  if (!langOpen.value) return
+  if (!langRef.value?.contains(e.target as Node)) langOpen.value = false
+}
+
+onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointerDown))
 </script>
 
 <template>
@@ -51,7 +58,7 @@ function setLang(code: LangCode) {
       <router-link to="/" class="text-lg font-bold tracking-wide">USTREAM</router-link>
       <div class="flex-1"></div>
       <SearchBox class="hidden sm:flex" />
-      <div class="relative">
+      <div class="relative" ref="langRef">
         <button
           class="cursor-pointer rounded p-2 hover:bg-white/10"
           :aria-label="t('header.lang')"
@@ -82,12 +89,6 @@ function setLang(code: LangCode) {
           class="relative rounded px-3 py-2 text-sm hover:bg-white/10"
         >
           {{ t(l.label) }}
-          <span
-            v-if="l.to === '/chat' && chatStore.unread > 0"
-            class="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px]"
-          >
-            {{ chatStore.unread }}
-          </span>
         </router-link>
       </nav>
     </div>
@@ -116,19 +117,11 @@ function setLang(code: LangCode) {
           >
             <component :is="l.icon" class="h-4 w-4" />
             {{ t(l.label) }}
-            <span
-              v-if="l.to === '/chat' && chatStore.unread > 0"
-              class="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px]"
-            >
-              {{ chatStore.unread }}
-            </span>
           </button>
         </div>
       </div>
     </transition>
-    <button v-if="open" class="fixed inset-0 -z-10 cursor-default" :aria-label="t('header.closeMenu')" @click="open = false">
-      <X class="hidden" />
-    </button>
+    <button v-if="open" class="fixed inset-0 -z-10 cursor-default" :aria-label="t('header.closeMenu')" @click="open = false"></button>
   </header>
 </template>
 

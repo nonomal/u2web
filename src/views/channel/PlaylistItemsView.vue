@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VideoCard from '@/components/VideoCard.vue'
 import ListRow from '@/components/ListRow.vue'
 import { List, LayoutGrid } from '@lucide/vue'
 import { playlistItems } from '@/service'
+import { videoIdOf } from '@/utils'
 import type { ListResponse, VideoItem } from '@/types'
 
 const { t } = useI18n()
@@ -20,13 +21,19 @@ const listview = ref(true)
 const playlistId = computed(() => route.params.listId as string)
 const page = computed(() => route.query.page as string | undefined)
 
+let seq = 0
+
 async function getPlayList() {
+  const cur = ++seq
   window.scrollTo(0, 0)
   disabled.value = true
-  const { ok, data } = await playlistItems(playlistId.value, page.value)
-  disabled.value = false
-  if (!ok) return
-  listdata.value = data
+  try {
+    const { ok, data } = await playlistItems(playlistId.value, page.value)
+    if (cur !== seq) return
+    listdata.value = ok ? data : { pageInfo: {}, items: [] }
+  } finally {
+    if (cur === seq) disabled.value = false
+  }
 }
 
 function prev() {
@@ -37,8 +44,7 @@ function next() {
   router.push({ name: route.name as string, query: { page: listdata.value.nextPageToken } })
 }
 
-watch(page, () => getPlayList())
-onMounted(() => getPlayList())
+watch([playlistId, page], () => void getPlayList(), { immediate: true })
 </script>
 
 <template>
@@ -66,10 +72,10 @@ onMounted(() => getPlayList())
     </div>
 
     <div v-if="listview">
-      <ListRow v-for="item in listdata.items" :key="item.etag" :item="item" :video="true" />
+      <ListRow v-for="item in listdata.items" :key="item.etag ?? videoIdOf(item)" :item="item" :video="true" />
     </div>
     <div v-else class="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
-      <VideoCard v-for="item in listdata.items" :key="item.etag" :item="item" />
+      <VideoCard v-for="item in listdata.items" :key="item.etag ?? videoIdOf(item)" :item="item" />
     </div>
 
     <div class="my-10 flex justify-end gap-3">

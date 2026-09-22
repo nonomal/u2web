@@ -9,6 +9,8 @@ const router = createRouter({
     {
       path: '/channel/:id',
       name: 'channel',
+      // /channel/:id 默认进入"上传的"子页
+      redirect: (to) => ({ name: 'channel.uploads', params: { id: to.params.id } }),
       component: () => import('@/views/ChannelView.vue'),
       children: [
         { path: 'uploads', name: 'channel.uploads', component: () => import('@/views/channel/UploadsView.vue') },
@@ -29,18 +31,11 @@ const router = createRouter({
     },
     { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
     { path: '/setting', name: 'setting', component: () => import('@/views/SettingView.vue') },
-    { path: '/chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
     { path: '/play', name: 'play', component: () => import('@/views/PlayView.vue') },
     { path: '/:pathMatch(.*)*', name: 'err404', component: () => import('@/views/NotFoundView.vue') },
   ],
-  scrollBehavior(to, _from, savedPosition) {
-    if (savedPosition) {
-      return savedPosition
-    }
-    if (to.name === 'video' || to.name === 'channel' || to.name === 'search') {
-      return { top: 0 }
-    }
-    return { top: 0 }
+  scrollBehavior(_to, _from, savedPosition) {
+    return savedPosition ?? { top: 0 }
   },
 })
 

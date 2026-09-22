@@ -17,6 +17,7 @@ const aCard = useTemplateRef<InstanceType<typeof StatCard>>('acard')
 const vdispatch = ref<Record<number, SegmentItem>>({})
 const adispatch = ref<Record<number, SegmentItem>>({})
 const stat = ref<Record<string, RtcPeerStat>>({})
+/** 本端节点标识(引擎回传的 rtc.id),非资源的 swarmId */
 const mid = ref('')
 
 const names = computed(() => {
@@ -50,34 +51,48 @@ const LEGEND: { cls: string; key: string }[] = [
 
 function bindLoader(loader: Fastloader | undefined, card: InstanceType<typeof StatCard> | null) {
   if (!loader) return
-  loader.listen('rtc.stat', (s, m) => {
+  // 引擎轮询时回传 (stat, uid),open/close/error 触发时只回传 stat;
+  // 后者不能把已取得的节点标识清空
+  loader.listen('rtc.stat', (s, uid) => {
     stat.value = (s as Record<string, RtcPeerStat>) ?? {}
-    mid.value = String(m ?? '')
+    if (uid) mid.value = String(uid)
   })
-  loader.listen('res.start', (item) => {
+  loader.listen('http.start', (item) => {
     card?.statusupdate('http-start', item as SegmentItem)
   })
-  loader.listen('res.done', (res) => {
+  loader.listen('http.done', (res) => {
     const r = res as SegmentItem & { err?: unknown }
     card?.statusupdate(r.err ? 'http-error' : 'http-done', r)
   })
-  loader.listen('res.rtc.start', (item) => {
+  loader.listen('rtc.start', (item) => {
     card?.statusupdate('rtc-start', item as SegmentItem)
   })
-  loader.listen('res.rtc.done', (res) => {
+  loader.listen('rtc.done', (res) => {
     card?.statusupdate('rtc-done', res as SegmentItem)
   })
-  loader.listen('res.rtc.progress', (res) => {
-    card?.statusupdate('progress', res as SegmentItem)
+  loader.listen('rtc.progress', (res) => {
+    const r = res as { i?: number; n?: number; part?: number }
+    card?.statusupdate('progress', { no: r.part ?? 0, i: r.i, n: r.n } as SegmentItem)
   })
+}
+
+/** fastloadjs 的分块对象用 start/end 表示字节区间,StatCard 需要 m/n */
+function toSegments(raw: unknown): Record<number, SegmentItem> {
+  const src = (raw ?? {}) as Record<number, { no: number; start: number; end: number }>
+  const out: Record<number, SegmentItem> = {}
+  for (const k of Object.keys(src)) {
+    const s = src[Number(k)]
+    out[Number(k)] = { no: s.no, m: s.start, n: s.end }
+  }
+  return out
 }
 
 /** 由播放页在 loadersready 事件后调用 */
 function onLoadersready(loaders: Fastloader[], dispatchs: unknown[]) {
   const [vloader, aloader] = loaders
-  const [vd, ad] = dispatchs as [Record<number, SegmentItem>?, Record<number, SegmentItem>?]
-  vdispatch.value = vd ?? {}
-  adispatch.value = ad ?? {}
+  const [vd, ad] = dispatchs as [unknown, unknown]
+  vdispatch.value = toSegments(vd)
+  adispatch.value = toSegments(ad)
   bindLoader(vloader, vCard.value)
   bindLoader(aloader, aCard.value)
 }

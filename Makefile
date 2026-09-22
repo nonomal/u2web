@@ -1,12 +1,9 @@
 release:
-	production=1 npm run build && \
+	VITE_BASE='https://assets.suconghou.cn/u2web/static/dist/' npm run build && \
 	coscmd upload -r -s dist /u2web/static/
 
 dev:
 	npm run dev
-
-mock:
-	npm run mock
 
 build:
 	npm run build
